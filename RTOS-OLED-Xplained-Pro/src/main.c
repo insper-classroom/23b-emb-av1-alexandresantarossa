@@ -14,10 +14,19 @@
 /* IOS                                                                  */
 /************************************************************************/
 
+#define NOTE_B5 988
+#define NOTE_E6 1319
+
 #define BTN_PIO PIOA
 #define BTN_PIO_ID ID_PIOA
 #define BTN_PIO_PIN 11
 #define BTN_PIO_PIN_MASK (1 << BTN_PIO_PIN)
+
+/* Adicionando defines para o Buzzer, considerando o mesmo esquema dos projetos anteriores */
+#define BUZZER_PIO           PIOC                 // Periferico que controla o buzzer
+#define BUZZER_PIO_ID        ID_PIOC              // ID do periférico Pio que controla o buzzer
+#define BUZZER_PIO_IDX       13u                  // ID do buzzer no PIO
+#define BUZZER_PIO_IDX_MASK  (1u << BUZZER_PIO_IDX)
 
 
 
@@ -32,6 +41,8 @@ void RTT_init(float freqPrescale, uint32_t IrqNPulses, uint32_t rttIRQSource);
 /* rtos vars                                                            */
 /************************************************************************/
 
+QueueHandle_t xQueueCoins;
+SemaphoreHandle_t xBtnSemaphore;
 
 /************************************************************************/
 /* RTOS application funcs                                               */
@@ -63,14 +74,56 @@ extern void vApplicationMallocFailedHook(void) {
 /************************************************************************/
 
 void but_callback(void) {
-
+	xSemaphoreGiveFromISR(xBtnSemaphore, NULL);
 }
 
+/* buzzer control */
+void buzzer_test(int delay_us){
+	pio_set(BUZZER_PIO, BUZZER_PIO_IDX_MASK);      // Coloca 1 no pino BUZZER
+	delay_us(delay_us);                            // Delay de tempo passado como parâmetro
+	pio_clear(BUZZER_PIO, BUZZER_PIO_IDX_MASK);    // Coloca 0 no pino do BUZZER
+}
 
 /************************************************************************/
 /* TASKS                                                                */
 /************************************************************************/
 
+static void task_coins(void *pvParameters) {
+	int coins;
+	int time;
+
+	srand(rtt_read_timer_value(RTT)); // Inicialização do rand() com seed do RTT
+
+	while(1){
+		if(xSemaphoreTake(xBtnSemaphore, portMAX_DELAY)){ // Espera o botão ser pressionado
+			coins = (rand() % 3) + 1; // Gera um valor aleatório entre 1 e 3
+			xQueueSend(xQueueCoins, &coins, portMAX_DELAY); // Envia valor para a fila
+			printf("Coins: %d\n", coins);
+		}
+	}
+}
+
+void tone(int freq, int tempo) {
+	int tempo_t = (1000000/freq);
+	int periodo = (tempo*1000) / (2*tempo_t);
+	
+	for (int i = 0; i<periodo; i++){
+		buzzer_test(tempo_t);
+	}
+}
+
+static void task_play(void *pvParameters) {
+	int coins_to_play;
+	while(1){
+		if(xQueueReceive(xQueueCoins, &coins_to_play, portMAX_DELAY)){ // Espera receber número de moedas da fila
+			for(int i = 0; i < coins_to_play; i++){
+				tone(NOTE_B5, 80);
+				tone(NOTE_E6, 640);
+				vTaskDelay(100);
+			}
+		}
+	}
+}
 
 static void task_debug(void *pvParameters) {
 	gfx_mono_ssd1306_init();
@@ -116,6 +169,13 @@ void btn_init(void) {
 	// com prioridade 4 (quanto mais próximo de 0 maior)
 	NVIC_EnableIRQ(BTN_PIO_ID);
 	NVIC_SetPriority(BTN_PIO_ID, 4); // Prioridade 4
+}
+
+void buzzer_init(void) {
+	// Ativa o PIO na qual o BUZZER está conectado
+	pmc_enable_periph_clk(BUZZER_PIO_ID);
+	// Configura o PIO para controlar o BUZZER como saída
+	pio_set_output(BUZZER_PIO, BUZZER_PIO_IDX_MASK, 0, 0, 0);
 }
 
 
@@ -172,6 +232,19 @@ int main(void) {
 
 	/* Initialize the console uart */
 	configure_console();
+	btn_init();
+	buzzer_init();
+	
+	xQueueCoins = xQueueCreate(10, sizeof(int)); // Inicializa fila
+    xBtnSemaphore = xSemaphoreCreateBinary(); // Inicializa semáforo
+
+    if (xTaskCreate(task_coins, "task_coins", 1024, NULL, tskIDLE_PRIORITY+1, NULL) != pdPASS) {
+        printf("Failed to create task_coins\r\n");
+    }
+
+    if (xTaskCreate(task_play, "task_play", 1024, NULL, tskIDLE_PRIORITY+2, NULL) != pdPASS) { 
+        printf("Failed to create task_play\r\n");
+    }
 	
 	if (xTaskCreate(task_debug, "debug", TASK_OLED_STACK_SIZE, NULL,
 	TASK_OLED_STACK_PRIORITY, NULL) != pdPASS) {
