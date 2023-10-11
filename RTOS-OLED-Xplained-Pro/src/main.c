@@ -91,9 +91,10 @@ void buzzer_test(int delay_us){
 
 static void task_coins(void *pvParameters) {
 	int coins;
-	int time;
+	int time = rtt_read_timer_value(RTT);
+	
 
-	srand(rtt_read_timer_value(RTT)); // Inicialização do rand() com seed do RTT
+	srand(time); // Inicialização do rand() com seed do RTT
 
 	while(1){
 		if(xSemaphoreTake(xBtnSemaphore, portMAX_DELAY)){ // Espera o botão ser pressionado
@@ -240,15 +241,15 @@ int main(void) {
 	buzzer_init();
 	
 	xQueueCoins = xQueueCreate(10, sizeof(int)); // Inicializa fila
-    xBtnSemaphore = xSemaphoreCreateBinary(); // Inicializa semáforo
+	xBtnSemaphore = xSemaphoreCreateBinary(); // Inicializa semáforo
 
-    if (xTaskCreate(task_coins, "task_coins", 1024, NULL, tskIDLE_PRIORITY, NULL) != pdPASS) {
-        printf("Failed to create task_coins\r\n");
-    }
+	if (xTaskCreate(task_coins, "task_coins", 1024, NULL, tskIDLE_PRIORITY, NULL) != pdPASS) {
+		printf("Failed to create task_coins\r\n");
+	}
 
-    if (xTaskCreate(task_play, "task_play", 1024, NULL, tskIDLE_PRIORITY+1, NULL) != pdPASS) { 
-        printf("Failed to create task_play\r\n");
-    }
+	if (xTaskCreate(task_play, "task_play", 1024, NULL, tskIDLE_PRIORITY+1, NULL) != pdPASS) {
+		printf("Failed to create task_play\r\n");
+	}
 	
 	if (xTaskCreate(task_debug, "debug", TASK_OLED_STACK_SIZE, NULL,
 	TASK_OLED_STACK_PRIORITY, NULL) != pdPASS) {
