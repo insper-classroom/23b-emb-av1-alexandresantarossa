@@ -22,11 +22,10 @@
 #define BTN_PIO_PIN 11
 #define BTN_PIO_PIN_MASK (1 << BTN_PIO_PIN)
 
-/* Adicionando defines para o Buzzer, considerando o mesmo esquema dos projetos anteriores */
-#define BUZZER_PIO           PIOC                 // Periferico que controla o buzzer
-#define BUZZER_PIO_ID        ID_PIOC              // ID do periférico Pio que controla o buzzer
-#define BUZZER_PIO_IDX       13u                  // ID do buzzer no PIO
-#define BUZZER_PIO_IDX_MASK  (1u << BUZZER_PIO_IDX)
+#define BUZZER_PIO			PIOD
+#define BUZZER_PIO_ID		ID_PIOD
+#define BUZZER_PIO_IDX		27
+#define BUZZER_PIO_IDX_MASK	(1 << BUZZER_PIO_IDX)
 
 
 
@@ -79,10 +78,12 @@ void but_callback(void) {
 
 /* buzzer control */
 void buzzer_test(int delay_us){
-	pio_set(BUZZER_PIO, BUZZER_PIO_IDX_MASK);      // Coloca 1 no pino BUZZER
-	delay_us(delay_us);                            // Delay de tempo passado como parâmetro
 	pio_clear(BUZZER_PIO, BUZZER_PIO_IDX_MASK);    // Coloca 0 no pino do BUZZER
+	delay_us(delay_us/2);                            // Delay de tempo passado como parâmetro
+	pio_set(BUZZER_PIO, BUZZER_PIO_IDX_MASK);      // Coloca 1 no pino BUZZER
+	delay_us(delay_us/2);                            // Delay de tempo passado como parâmetro
 }
+
 
 /************************************************************************/
 /* TASKS                                                                */
@@ -232,17 +233,20 @@ int main(void) {
 
 	/* Initialize the console uart */
 	configure_console();
+	
+	printf("Sistema inicializado com seed: %d\n", rtt_read_timer_value(RTT));
+	
 	btn_init();
 	buzzer_init();
 	
 	xQueueCoins = xQueueCreate(10, sizeof(int)); // Inicializa fila
     xBtnSemaphore = xSemaphoreCreateBinary(); // Inicializa semáforo
 
-    if (xTaskCreate(task_coins, "task_coins", 1024, NULL, tskIDLE_PRIORITY+1, NULL) != pdPASS) {
+    if (xTaskCreate(task_coins, "task_coins", 1024, NULL, tskIDLE_PRIORITY, NULL) != pdPASS) {
         printf("Failed to create task_coins\r\n");
     }
 
-    if (xTaskCreate(task_play, "task_play", 1024, NULL, tskIDLE_PRIORITY+2, NULL) != pdPASS) { 
+    if (xTaskCreate(task_play, "task_play", 1024, NULL, tskIDLE_PRIORITY+1, NULL) != pdPASS) { 
         printf("Failed to create task_play\r\n");
     }
 	
